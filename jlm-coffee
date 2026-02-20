@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# CLI shortcut - symlink this to /usr/local/bin/jlm-coffee
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+exec python3 "$SCRIPT_DIR/scripts/jlm-coffee.py" "$@"
