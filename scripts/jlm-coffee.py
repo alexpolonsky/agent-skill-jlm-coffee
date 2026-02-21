@@ -1,29 +1,25 @@
 #!/usr/bin/env python3
-"""Jerusalem specialty coffee shop finder - queries the public Firestore database."""
+"""Jerusalem specialty coffee shop finder - queries the public JSON export."""
 
 import argparse
 import json
 import os
 import random
-import re
 import sys
 import tempfile
 import time
 import urllib.request
 import urllib.error
-import urllib.parse
 from datetime import datetime
 
-PROJECT = "specialy-coffee-finder"
-BASE_URL = f"https://firestore.googleapis.com/v1/projects/{PROJECT}/databases/(default)/documents"
+# Public Google Doc with the full coffee shop database, maintained by Shaul Amsterdamski
+DOC_ID = "1BfsXKQLbKjogfSebRr0Ixt4L4VJHqPqTfnWxkosvcuM"
+DATA_URL = f"https://docs.google.com/document/d/{DOC_ID}/export?format=txt"
 SITE_URL = "https://coffee.amsterdamski.com"
 
-CACHE_TTL = 3600  # 1 hour
+CACHE_TTL = 900  # 15 minutes (Google Docs server-side cache is ~5min)
 CACHE_DIR = os.path.join(tempfile.gettempdir(), "jlm-coffee")
 CACHE_FILE = os.path.join(CACHE_DIR, "shops.json")
-KEY_CACHE_FILE = os.path.join(CACHE_DIR, "api_key")
-
-_api_key = None
 
 AMENITY_LABELS = {
     "wifi": "WiFi",
@@ -44,7 +40,6 @@ AMENITY_LABELS = {
     "parking": "Parking",
 }
 
-DAY_NAMES_HE = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
 DAY_NAMES_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 # --- Color support ---
@@ -92,51 +87,26 @@ def brown(text):
     return c(text, "38;5;130")
 
 
-# --- API key discovery ---
+# --- Data fetching ---
 
 
-def _get_api_key():
-    """Get Firebase API key, from cache or by reading the site's JS bundle."""
-    global _api_key
-    if _api_key:
-        return _api_key
-
-    # Check cached key (same TTL as shop data)
+def _fetch_data():
+    """Fetch the full JSON from the public Google Doc export."""
     try:
-        if os.path.exists(KEY_CACHE_FILE):
-            age = time.time() - os.path.getmtime(KEY_CACHE_FILE)
-            if age < CACHE_TTL:
-                with open(KEY_CACHE_FILE, "r") as f:
-                    key = f.read().strip()
-                    if key:
-                        _api_key = key
-                        return _api_key
-    except OSError:
-        pass
-
-    # Fetch from site
-    try:
-        html = urllib.request.urlopen(SITE_URL, timeout=10).read().decode()
-        scripts = re.findall(r'src="([^"]+\.js[^"]*)"', html)
-        for src in scripts:
-            url = src if src.startswith("http") else SITE_URL + src
-            js = urllib.request.urlopen(url, timeout=10).read().decode()
-            match = re.search(r"AIza[A-Za-z0-9_-]{35}", js)
-            if match:
-                _api_key = match.group(0)
-                try:
-                    os.makedirs(CACHE_DIR, exist_ok=True)
-                    with open(KEY_CACHE_FILE, "w") as f:
-                        f.write(_api_key)
-                except OSError:
-                    pass
-                return _api_key
-    except (urllib.error.URLError, urllib.error.HTTPError) as e:
-        print(f"Error: Could not fetch API key from {SITE_URL} - {e}", file=sys.stderr)
+        resp = urllib.request.urlopen(DATA_URL, timeout=15)
+        raw = resp.read()
+        text = raw.decode("utf-8-sig")  # Google Doc export includes BOM
+        data = json.loads(text)
+        return data
+    except urllib.error.HTTPError as e:
+        print(f"Error: HTTP {e.code} fetching data from Google Docs", file=sys.stderr)
         sys.exit(1)
-
-    print("Error: Could not find Firebase API key in site source", file=sys.stderr)
-    sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"Error: Could not connect - {e.reason}", file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in data source - {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 # --- Cache ---
@@ -171,131 +141,14 @@ def _write_cache(shops):
 
 
 def get_all_shops():
-    """Get all approved shops, from cache if fresh, otherwise from API."""
+    """Get all shops, from cache if fresh, otherwise from the data source."""
     cached = _read_cache()
     if cached is not None:
         return cached
-    shops = query_shops()
+    data = _fetch_data()
+    shops = data.get("shops", [])
     _write_cache(shops)
     return shops
-
-
-# --- Firestore API ---
-
-
-def firestore_request(path, method="GET", body=None):
-    api_key = _get_api_key()
-    url = f"{BASE_URL}{path}"
-    sep = "&" if "?" in url else "?"
-    url += f"{sep}key={api_key}"
-
-    req = urllib.request.Request(url)
-    req.add_header("Content-Type", "application/json")
-
-    data = json.dumps(body).encode() if body else None
-    if method == "POST":
-        req.method = "POST"
-
-    try:
-        with urllib.request.urlopen(req, data=data, timeout=15) as resp:
-            return json.loads(resp.read().decode())
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode()
-        try:
-            err = json.loads(error_body)
-            print(f"Error: {err.get('error', {}).get('message', error_body)}", file=sys.stderr)
-        except json.JSONDecodeError:
-            print(f"Error: HTTP {e.code} - {error_body[:200]}", file=sys.stderr)
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f"Error: Could not connect - {e.reason}", file=sys.stderr)
-        sys.exit(1)
-
-
-def extract_value(field):
-    if "stringValue" in field:
-        return field["stringValue"]
-    if "integerValue" in field:
-        return int(field["integerValue"])
-    if "doubleValue" in field:
-        return field["doubleValue"]
-    if "booleanValue" in field:
-        return field["booleanValue"]
-    if "nullValue" in field:
-        return None
-    if "arrayValue" in field:
-        return [extract_value(v) for v in field.get("arrayValue", {}).get("values", [])]
-    if "mapValue" in field:
-        return {k: extract_value(v) for k, v in field.get("mapValue", {}).get("fields", {}).items()}
-    if "timestampValue" in field:
-        return field["timestampValue"]
-    return None
-
-
-def parse_doc(doc):
-    fields = doc.get("fields", {})
-    doc_id = doc.get("name", "").split("/")[-1]
-    parsed = {"id": doc_id}
-    for key, val in fields.items():
-        parsed[key] = extract_value(val)
-    return parsed
-
-
-def query_shops(where=None, select_fields=None):
-    query = {
-        "structuredQuery": {
-            "from": [{"collectionId": "coffeeShops"}],
-            "where": {
-                "fieldFilter": {
-                    "field": {"fieldPath": "status"},
-                    "op": "EQUAL",
-                    "value": {"stringValue": "approved"},
-                }
-            },
-        }
-    }
-
-    if where:
-        query["structuredQuery"]["where"] = {
-            "compositeFilter": {
-                "op": "AND",
-                "filters": [
-                    {
-                        "fieldFilter": {
-                            "field": {"fieldPath": "status"},
-                            "op": "EQUAL",
-                            "value": {"stringValue": "approved"},
-                        }
-                    },
-                    where,
-                ],
-            }
-        }
-
-    if select_fields:
-        query["structuredQuery"]["select"] = {
-            "fields": [{"fieldPath": f} for f in select_fields]
-        }
-
-    result = firestore_request(":runQuery", method="POST", body=query)
-    shops = []
-    for item in result:
-        doc = item.get("document")
-        if doc:
-            shops.append(parse_doc(doc))
-    return shops
-
-
-def get_shop(shop_id):
-    result = firestore_request(f"/coffeeShops/{shop_id}")
-    return parse_doc(result)
-
-
-def find_shop_by_name(name):
-    shops = get_all_shops()
-    name_lower = name.lower()
-    matches = [s for s in shops if name_lower in s.get("name", "").lower()]
-    return matches
 
 
 # --- Formatting ---
@@ -305,6 +158,11 @@ def format_hours(shop):
     hours = shop.get("openingHours")
     if not hours or not isinstance(hours, dict):
         return "Hours not available"
+
+    # Prefer human-readable descriptions if available
+    descriptions = hours.get("weekdayDescriptions", [])
+    if descriptions:
+        return "\n".join(f"  {d}" for d in descriptions)
 
     periods = hours.get("periods", [])
     if not periods:
@@ -336,7 +194,7 @@ def is_open_now(shop):
         return None
 
     now = datetime.now()
-    current_day = (now.weekday() + 1) % 7  # Python: Mon=0, Firestore: Sun=0
+    current_day = (now.weekday() + 1) % 7  # Python: Mon=0, Google: Sun=0
     current_minutes = now.hour * 60 + now.minute
 
     for period in periods:
@@ -360,7 +218,7 @@ def format_stars(rating):
         return dim("No rating")
     filled = int(rating)
     half = rating - filled >= 0.5
-    stars = yellow("★") * filled
+    stars = yellow("*") * filled
     if half:
         stars += yellow("½")
     return f"{stars} {rating}"
@@ -397,6 +255,10 @@ def format_shop_detail(shop):
     if desc:
         lines.append(f"  {dim('Description:')} {desc}")
 
+    address = shop.get("address", "")
+    if address:
+        lines.append(f"  {dim('Address:')} {address}")
+
     amenities = shop.get("amenities", [])
     if amenities and isinstance(amenities, list):
         tags = ", ".join(AMENITY_LABELS.get(a, a) for a in amenities)
@@ -409,9 +271,9 @@ def format_shop_detail(shop):
         lines.append(f"  {dim('Location:')} {lat}, {lng}")
         lines.append(f"  {dim('Google Maps:')} https://www.google.com/maps?q={lat},{lng}")
 
-    place_id = shop.get("googlePlaceId")
-    if place_id:
-        lines.append(f"  {dim('Google Place ID:')} {place_id}")
+    instagram = shop.get("instagramUrl", "")
+    if instagram:
+        lines.append(f"  {dim('Instagram:')} {instagram}")
 
     hours_str = format_hours(shop)
     if hours_str != "Hours not available":
@@ -424,11 +286,22 @@ def format_shop_detail(shop):
         lines.append(f"  {dim('Hours')}{status_str}{dim(':')}")
         lines.append(hours_str)
 
+    # Show reviews if available
+    shop_reviews = shop.get("reviews", [])
+    if shop_reviews and isinstance(shop_reviews, list):
+        lines.append(f"  {dim('Reviews:')}")
+        for rev in shop_reviews[:3]:  # Show up to 3 reviews
+            user = rev.get("userName", "Anonymous")
+            r = rev.get("rating", "")
+            text = rev.get("text", "")
+            rating_str = f" ({yellow('*') * int(r)})" if r else ""
+            lines.append(f"    {bold(user)}{rating_str}: {text}")
+
     images = shop.get("imageUrls", [])
     if images and isinstance(images, list):
         lines.append(f"  {dim('Photos:')} {len(images)} available")
 
-    lines.append(f"  {dim('Web:')} https://coffee.amsterdamski.com/shop/{shop['id']}")
+    lines.append(f"  {dim('Web:')} {SITE_URL}/shop/{shop['id']}")
     return "\n".join(lines)
 
 
@@ -458,7 +331,9 @@ def cmd_list(args):
 
 
 def cmd_search(args):
-    matches = find_shop_by_name(args.query)
+    shops = get_all_shops()
+    query_lower = args.query.lower()
+    matches = [s for s in shops if query_lower in s.get("name", "").lower()]
 
     if args.json:
         print(format_json({"ok": True, "command": "search", "query": args.query, "count": len(matches), "shops": matches}))
@@ -476,31 +351,20 @@ def cmd_search(args):
 
 def cmd_get(args):
     identifier = args.id
+    shops = get_all_shops()
 
-    # Try as document ID first (check cache before hitting API)
-    if len(identifier) > 15 and identifier.isalnum():
-        cached = _read_cache()
-        if cached:
-            match = [s for s in cached if s.get("id") == identifier]
-            if match:
-                shop = match[0]
-                if args.json:
-                    print(format_json({"ok": True, "command": "get", "shop": shop}))
-                else:
-                    print(format_shop_detail(shop))
-                return
-        try:
-            shop = get_shop(identifier)
-            if args.json:
-                print(format_json({"ok": True, "command": "get", "shop": shop}))
-            else:
-                print(format_shop_detail(shop))
-            return
-        except SystemExit:
-            pass
+    # Try as document ID first
+    match = [s for s in shops if s.get("id") == identifier]
+    if match:
+        if args.json:
+            print(format_json({"ok": True, "command": "get", "shop": match[0]}))
+        else:
+            print(format_shop_detail(match[0]))
+        return
 
     # Fall back to name search
-    matches = find_shop_by_name(identifier)
+    id_lower = identifier.lower()
+    matches = [s for s in shops if id_lower in s.get("name", "").lower()]
     if not matches:
         print(f"No shop found matching '{identifier}'")
         sys.exit(1)
@@ -516,38 +380,19 @@ def cmd_get(args):
 
 def cmd_filter(args):
     amenity = args.amenity.lower()
-    # Map common aliases
     aliases = {
-        "wifi": "wifi",
-        "dogs": "dogs",
-        "dog": "dogs",
-        "dog-friendly": "dogs",
-        "laptop": "laptop",
-        "laptops": "laptop",
-        "outdoor": "outdoor",
-        "outside": "outdoor",
-        "terrace": "outdoor",
-        "accessible": "accessible",
-        "wheelchair": "accessible",
-        "vegan": "vegan",
-        "kids": "kids",
-        "children": "kids",
-        "kid-friendly": "kids",
-        "quiet": "quiet",
-        "smoking": "smoking",
-        "roasting": "local-roasting",
-        "local-roasting": "local-roasting",
-        "beans": "sell-beans",
-        "sell-beans": "sell-beans",
-        "filter": "filter-coffee",
-        "filter-coffee": "filter-coffee",
+        "wifi": "wifi", "dogs": "dogs", "dog": "dogs", "dog-friendly": "dogs",
+        "laptop": "laptop", "laptops": "laptop",
+        "outdoor": "outdoor", "outside": "outdoor", "terrace": "outdoor",
+        "accessible": "accessible", "wheelchair": "accessible",
+        "vegan": "vegan", "kids": "kids", "children": "kids", "kid-friendly": "kids",
+        "quiet": "quiet", "smoking": "smoking",
+        "roasting": "local-roasting", "local-roasting": "local-roasting",
+        "beans": "sell-beans", "sell-beans": "sell-beans",
+        "filter": "filter-coffee", "filter-coffee": "filter-coffee",
         "kosher": "kosher",
-        "saturday": "open-saturday",
-        "shabbat": "open-saturday",
-        "open-saturday": "open-saturday",
-        "power": "power",
-        "outlets": "power",
-        "parking": "parking",
+        "saturday": "open-saturday", "shabbat": "open-saturday", "open-saturday": "open-saturday",
+        "power": "power", "outlets": "power", "parking": "parking",
     }
 
     resolved = aliases.get(amenity, amenity)

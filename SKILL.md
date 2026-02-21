@@ -6,7 +6,7 @@ compatibility: Requires Python 3.9+ (stdlib only, no dependencies) and internet 
 metadata:
   author: Alex Polonsky
   github: https://github.com/alexpolonsky
-  version: "1.0.0"
+  version: "2.0.0"
   keywords: coffee, jerusalem, cafe, specialty, israel, קפה, ירושלים
   openclaw:
     emoji: "☕"
@@ -20,9 +20,9 @@ metadata:
 
 # Jerusalem Coffee Finder
 
-Search specialty coffee shops in Jerusalem - ratings, amenities, opening hours, and locations from [coffee.amsterdamski.com](https://coffee.amsterdamski.com), created and curated by [Shaul Amsterdamski](https://x.com/amsterdamski2) ([@amsterdamski2](https://x.com/amsterdamski2)).
+Search specialty coffee shops in Jerusalem - ratings, amenities, opening hours, reviews, and locations from [coffee.amsterdamski.com](https://coffee.amsterdamski.com), created and curated by [Shaul Amsterdamski](https://x.com/amsterdamski2) ([@amsterdamski2](https://x.com/amsterdamski2)).
 
-> Data from the site's public database. May not reflect current status. Provided "as is" without warranty of any kind.
+> Data from the official public JSON export provided by the site maintainer. May not reflect current status. Provided "as is" without warranty of any kind.
 
 ## Quick Start
 
@@ -114,9 +114,11 @@ python3 {baseDir}/scripts/jlm-coffee.py surprise
 ## Notes
 
 - **Community-curated**: All specialty coffee in Jerusalem, community-reviewed
-- **No API key needed**: Reads from the site's public Firestore database
+- **Official data source**: Reads from a public JSON export provided by the site maintainer (no API key, no Firestore)
 - **Bilingual**: Search works with Hebrew and English names
 - **Opening hours**: Based on Google Places data, cached by the site
+- **Reviews included**: Shop details show community reviews with ratings
 - **Color output**: ANSI colors in terminal (respects `NO_COLOR` env var and `--no-color` flag)
 - **CLI shortcut**: Install as `jlm-coffee` via symlink to the wrapper script
 - **No dependencies**: Python stdlib only (urllib, json)
+- **Fast caching**: 15-minute local cache TTL - one fetch covers all commands
