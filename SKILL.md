@@ -1,21 +1,11 @@
 ---
 name: jlm-coffee
+version: 2.0.0
 description: Search Jerusalem specialty coffee shops by name, amenities, ratings, and opening hours. Use when user asks about "coffee in Jerusalem", "Jerusalem cafe", "בית קפה בירושלים", "קפה בירושלים", "specialty coffee Jerusalem", "where to get coffee in Jerusalem", "dog-friendly cafe Jerusalem", "laptop cafe Jerusalem", "open now coffee Jerusalem".
+author: Alex Polonsky (https://github.com/alexpolonsky)
+homepage: https://github.com/alexpolonsky/agent-skill-jlm-coffee
 license: MIT
-compatibility: Requires Python 3.9+ (stdlib only, no dependencies) and internet access
-metadata:
-  author: Alex Polonsky
-  github: https://github.com/alexpolonsky
-  version: "2.0.0"
-  keywords: coffee, jerusalem, cafe, specialty, israel, קפה, ירושלים
-  openclaw:
-    emoji: "☕"
-    os:
-      - darwin
-      - linux
-    requires:
-      bins:
-        - python3
+metadata: {"openclaw": {"emoji": "☕", "os": ["darwin", "linux"], "requires": {"bins": ["python3"]}}}
 ---
 
 # Jerusalem Coffee Finder

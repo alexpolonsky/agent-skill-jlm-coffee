@@ -1,9 +1,10 @@
 # jlm-coffee - Jerusalem specialty coffee shop finder
 
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Agent Skills](https://img.shields.io/badge/Agent_Skills-compatible-green.svg)](https://agentskills.io)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Agent Skills](https://img.shields.io/badge/Agent%20Skills-compatible-purple)
+[![ClawHub](https://img.shields.io/badge/ClawHub-jlm--coffee-blue)](https://clawhub.ai/skills/jlm-coffee)
 
-> **[Agent Skills](https://agentskills.io) format** - works with OpenClaw, Claude, Cursor, Codex, and other compatible clients
+> **[Agent Skills](https://agentskills.io) format** - works with OpenClaw, Claude, Cursor, Codex, and other compatible clients | **[ClawHub](https://clawhub.ai/skills/jlm-coffee)**
 
 Search community-curated specialty coffee shops in Jerusalem by name, amenities, ratings, and opening hours. Data from [coffee.amsterdamski.com](https://coffee.amsterdamski.com), created and curated by [Shaul Amsterdamski](https://x.com/amsterdamski2).
 
@@ -14,7 +15,11 @@ You're visiting Jerusalem and want specialty coffee - not tourist-trap instant. 
 ## Installation
 
 ```bash
-npx skills add jlm-coffee
+# ClawHub
+clawdhub install jlm-coffee
+
+# npx
+npx skills add alexpolonsky/agent-skill-jlm-coffee
 ```
 
 <details>
@@ -151,7 +156,7 @@ Runs integration tests covering all commands, JSON output, Hebrew/English search
 
 ## How it works
 
-Reads the public Firestore database behind coffee.amsterdamski.com. The `coffeeShops` collection is readable without authentication. Opening hours come from Google Places data cached by the site.
+Reads the official public JSON export from coffee.amsterdamski.com. No authentication required. Opening hours come from Google Places data cached by the site.
 
 ## Limitations
 
@@ -160,12 +165,12 @@ Reads the public Firestore database behind coffee.amsterdamski.com. The `coffeeS
 - Opening hours depend on the site's Google Places cache freshness
 - Search is name-only (no full-text search on descriptions)
 
-Data from the site's public database. May not reflect current status. Does not write data or place orders. Provided "as is" without warranty of any kind.
+## Legal
+
+Independent open-source tool. Not affiliated with or endorsed by [coffee.amsterdamski.com](https://coffee.amsterdamski.com). Data from the site's public JSON export and may not reflect current status. Does not write data or place orders. Provided "as is" without warranty of any kind.
 
 ## Author
 
-[Alex Polonsky](https://github.com/alexpolonsky) - [GitHub](https://github.com/alexpolonsky) - [LinkedIn](https://linkedin.com/in/alexpolonsky)
-
----
+[Alex Polonsky](https://alexpolonsky.com) - [GitHub](https://github.com/alexpolonsky) - [Twitter/X](https://x.com/alexpo) - [LinkedIn](https://www.linkedin.com/in/alexpolonsky/)
 
 Part of [Agent Skills](https://github.com/alexpolonsky/agent-skills) - [Specification](https://agentskills.io/specification)
